@@ -1,4 +1,11 @@
-/* Sets all the text color to red! */
-body {
-    color: red;
+.reset-this {
+    all: initial;
+}
+
+.page {
+    margin-bottom: .4cm;
+}
+
+.brew-settings-input-header {
+    text-align: center;
 }
