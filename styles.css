@@ -6,6 +6,17 @@
     margin-bottom: .4cm;
 }
 
-.brew-settings-input-header {
-    text-align: center;
+.brew-settings-container {
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.brew-settings-container h4 {
+    margin-top: 1vh;
+    margin-bottom: 1vh;
+}
+
+.brew-settings-container .setting-item {
+    border-top: none;
+    padding-top: .6vh;
+    padding-bottom: .6vh;
 }

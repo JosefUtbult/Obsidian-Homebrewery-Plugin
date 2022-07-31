@@ -179,6 +179,14 @@ export default class Homebrewery extends Plugin {
 		getParser.send();
 	}
 
+	getThemes() {
+		let getThemesJSON = new XMLHttpRequest();
+		getThemesJSON.open("GET", HOMEBREWERY_URL + '/api/themes.json', false);
+		getThemesJSON.send();
+		
+		return JSON.parse(getThemesJSON.responseText);
+	}
+
 	// Check if parser is loaded. Tries to load it if not
 	async checkParser() {
 		if (!fs.existsSync(getAbsolutePath(PARSER_RELATIVE_DIR))){
@@ -275,6 +283,7 @@ export class BrewView extends ItemView {
 
 		// If the current file isn't in the brew settings, it should not be rendered
 		if(!brewSettingsInstance){
+			console.log("Not a Brew");
 			return;
 		}
 
@@ -302,9 +311,9 @@ class HomebrewerySettingTab extends PluginSettingTab {
 
 	display(): void {
 		const {containerEl} = this;
+		let themesJson = this.plugin.getThemes();
 
 		containerEl.empty();
-
 		containerEl.createEl('h2', {text: 'Homebrewery settings'});
 
 		// Load the parser from the Homebrewery site
@@ -351,9 +360,12 @@ class HomebrewerySettingTab extends PluginSettingTab {
 		// Expose this as object in loop
 		const parent = this
 		this.plugin.settings.linkedFiles.forEach(function (instance: brew_setting, index) {
-			containerEl.createEl('h4', {text: 'Brew'});
+			let childContainer = containerEl.createDiv('brew-settings-container');
 			
-			new Setting(containerEl)
+			// Add an heading containing only the filename
+			childContainer.createEl('h4', {text: instance.filepath ? instance.filepath.replace(/^.*[\\\/]/, '') : 'Brew'});
+			
+			new Setting(childContainer)
 				.setName(`Filepath`)
 				.addText( text => text
 					.setValue(instance.filepath)
@@ -362,15 +374,22 @@ class HomebrewerySettingTab extends PluginSettingTab {
 						await parent.plugin.saveSettings();
 					})
 				)
-			new Setting(containerEl)
+
+			new Setting(childContainer)
 				.setName('Theme')
 				.addDropdown((dropdown) => {
-					let tmp = ['Hello', 'There', 'My', 'Friend'];
-					tmp.forEach((instance)=>{
-						dropdown.addOption(instance, instance)
+					themesJson['homebrewery-themes'].forEach((theme)=>{
+						dropdown.addOption(theme['path'], theme['name'])
 					})
+					dropdown.setValue(instance.theme)
+						.onChange(async theme => {
+							instance.theme = theme;
+							await parent.plugin.saveSettings();
+							await parent.plugin.updateBrewViews();
+						});
 				})
-			new Setting(containerEl)
+
+			new Setting(childContainer)
 				.setName('Remove Brew')
 				.setDesc('This will not remove the markdown files. Only the links to Homebrewery')
 				// Adds button to remove a specific brew
