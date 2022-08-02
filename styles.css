@@ -20,3 +20,17 @@
     padding-top: .6vh;
     padding-bottom: .6vh;
 }
+
+.homebrewery-snippets-container {
+    height: 14vh;
+}
+
+.homebrewery-snippet-container {
+    position: absolute;
+    padding-top: 1vh;
+}
+
+.homebrewery-snippet-button {
+    margin-top: .4vh;
+    margin-right: 1vw;
+}

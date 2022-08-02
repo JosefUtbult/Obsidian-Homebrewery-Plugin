@@ -70,26 +70,24 @@ export default class Homebrewery extends Plugin {
 		);
 
 		// This creates an icon in the left ribbon.
+		/*
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+			new SnippetsModal(this.app, this).open();
 		});
+		*/
 
 		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		// ribbonIconEl.addClass('my-plugin-ribbon-class');
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
+		// Load Snippets Modal
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				// new SampleModal(this.app).open();
-			}
-		});
+			id: "display-modal",
+			name: "Display Snippets",
+			// TODO: Figure out a way to get the editor object into the ribbon icon
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				new SnippetsModal(this.app, this, editor).open();
+			},
+		  });
 
 		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
@@ -98,25 +96,6 @@ export default class Homebrewery extends Plugin {
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				console.log(editor.getSelection());
 				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						// new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
 			}
 		});
 
@@ -205,6 +184,28 @@ export default class Homebrewery extends Plugin {
 			}
 		});
 	}
+
+	getActiveBrewSettings() {
+		const activeFile = this.app.workspace.getActiveFile();
+
+		// Check if file is open
+		if(! activeFile || !activeFile.name) {
+			return undefined;
+		}
+
+		const brewSettingsInstance = this.settings.linkedFiles.find((instance)=>{
+			return instance['filepath'] == activeFile.path || 
+			instance['filepath'] + '.md' == activeFile.path
+		});
+
+		// If the current file isn't in the brew settings, it should not be rendered
+		if(!brewSettingsInstance){
+			console.log("Not a Brew");
+			return undefined;
+		}
+
+		return brewSettingsInstance;
+	}
 }
 
 
@@ -270,26 +271,12 @@ export class BrewView extends ItemView {
 	// and display the result in the Homebrewery viewer
 	async updateView() {
 		const activeFile = this.app.workspace.getActiveFile();
-		
-		// Check if file is open
-		if(! activeFile || !activeFile.name) {
-			return;
-		}
+		const activeBrewSettings = this.plugin.getActiveBrewSettings();
+		if(!activeBrewSettings) return;
 
-		const brewSettingsInstance = this.plugin.settings.linkedFiles.find((instance)=>{
-			return instance['filepath'] == activeFile.path || 
-			instance['filepath'] + '.md' == activeFile.path
-		});
-
-		// If the current file isn't in the brew settings, it should not be rendered
-		if(!brewSettingsInstance){
-			console.log("Not a Brew");
-			return;
-		}
-
-		const res = await this.parseMarkdown(activeFile);
+		const res = await this.parseMarkdown(activeFile as TFile);
 		// TODO: Add functionality for locally stored stylesheets
-		this.setContent(res, `${HOMEBREWERY_URL}/api/themes/${brewSettingsInstance.theme}/style.css`);
+		this.setContent(res, `${HOMEBREWERY_URL}/api/themes/${activeBrewSettings.theme}/style.css`);
 	}
 
 	async onOpen() {
@@ -298,6 +285,108 @@ export class BrewView extends ItemView {
 
 	async onClose() {
 		// Nothing to clean up.
+	}
+}
+
+export class SnippetsModal extends Modal {
+	plugin: Homebrewery;
+	editor: Editor;
+
+	constructor(app: App, plugin: Homebrewery, editor: Editor) {
+		super(app);
+		this.plugin = plugin;
+		this.editor = editor;
+	}
+
+	toggleSnippetsGroup(snippetsContainer: HTMLDivElement, containerName: string) {
+		const containers = snippetsContainer.getElementsByClassName(containerName);
+		if(!containers) return;
+
+		const container = containers[0];
+		if((container as HTMLElement).style.display == 'none') {
+			this.hideAllSnippetsGroups(snippetsContainer);
+			(container as HTMLElement).style.display = 'block';
+		}
+		else {
+			this.hideAllSnippetsGroups(snippetsContainer);
+		}
+	}
+
+	hideAllSnippetsGroups(snippetsContainer: HTMLDivElement) {
+		let buttonEls = snippetsContainer.getElementsByClassName('homebrewery-snippet-container');
+		for(let i = 0; i < buttonEls.length; i++ ) {
+			(buttonEls[i] as HTMLElement).style.display = 'none';
+		}
+	}
+
+	onOpen() {
+		let { contentEl } = this;
+
+		const activeBrewSettings = this.plugin.getActiveBrewSettings();
+
+		// Read the current themes snippets from Homebrewery
+		let readThemeSnippets = new XMLHttpRequest();
+		readThemeSnippets.open("GET", `${HOMEBREWERY_URL}/api/themes/${activeBrewSettings?.theme}/snippets.json`, false);
+		readThemeSnippets.send();
+		let snippetsGroups = JSON.parse(readThemeSnippets.responseText);
+
+		// We only want to view the snippets for the markdown input field
+		snippetsGroups = snippetsGroups.filter((instance)=>{return instance['view'] == 'text'});
+
+		// Add a link element containing the import for fontawesome
+		const fontawesomeImport = contentEl.createEl('link');
+		fontawesomeImport.href = "https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css";
+		fontawesomeImport.rel = 'stylesheet';
+
+		contentEl.createEl('h1').innerHTML = 'Homebrewery Snippets';
+		// Container for all group buttons and all snippets buttons
+		const snippetsGroupContainer = contentEl.createDiv('homebrewery-snippets-group-container');
+
+		// Generate identifying class name for snippet groups
+		const uniqueSnippetName = (snippetsGroup) => {
+			return `${snippetsGroup['groupName'].replace(' ', '-')}-container`
+		};
+
+		// Go through all groups, add a button in the snippetsGroupContainer and make it display the groups snippets on click
+		snippetsGroups.forEach((snippetsGroup)=>{
+			let snippetsGroupButton = snippetsGroupContainer.createEl('button', 'mod-cta homebrewery-snippets-group-button')
+
+			snippetsGroupButton.innerHTML = `<i class="fa fa-solid ${snippetsGroup['icon']}"></i> ${snippetsGroup['groupName']}`;
+			snippetsGroupButton.onClickEvent((() => {
+				this.toggleSnippetsGroup(snippetsContainer, uniqueSnippetName(snippetsGroup));
+			}));
+		});
+
+		// Container for all snippet snippets in every group
+		const snippetsContainer = snippetsGroupContainer.createDiv('homebrewery-snippets-container');
+
+		snippetsGroups.forEach((snippetsGroup)=>{
+			// Container for all snippets in specific group
+			let snippetGroupContainer = snippetsContainer
+				.createDiv(`homebrewery-snippet-container ${uniqueSnippetName(snippetsGroup)}`)
+			snippetGroupContainer.style.display = 'none';
+
+			snippetsGroup['snippets'].forEach((snippet) => {
+				let snippetButton = snippetGroupContainer.createEl('button')
+				snippetButton.addClass('homebrewery-snippet-button');
+				snippetButton.innerHTML = `<i class="fa fa-solid ${snippet['icon']}"></i> ${snippet['name']}`;
+				snippetButton.onClickEvent(() => {
+					this.hideAllSnippetsGroups(snippetsContainer);
+
+					// Run the specified snippet in Homebrewery
+					let runSnippet = new XMLHttpRequest();
+					runSnippet.open("POST", snippet['path'] , false);
+					runSnippet.send();
+					this.editor.replaceSelection(runSnippet.responseText);
+				})
+			});
+		});
+		
+	}
+  
+	onClose() {
+		let { contentEl } = this;
+		contentEl.empty();
 	}
 }
 
