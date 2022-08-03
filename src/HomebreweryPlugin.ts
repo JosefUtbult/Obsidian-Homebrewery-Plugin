@@ -71,26 +71,13 @@ export default class HomebreweryPlugin extends Plugin {
 			new SnippetsModal(this.app, this, editor).open();
 		}).addClass('my-plugin-ribbon-class');
 
-		const app = this.app;
-		this.addCommand({
-			id: "homebrewery-test",
-			name: "Test",
-			callback() {
-				const editor = app.workspace?.getActiveViewOfType(MarkdownView)?.editor;
-				console.log(editor);
-				// console.log(view.editor);
-			},
-		})
-
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new HomebrewerySettingTab(this.app, this));
 
-		// Use lambda call to function for "this" to carry on to it.
-		// TODO: See if the update process can be made in some other way that is faster
-		this.registerEvent(this.app.vault.on('modify', ()=>{this.updateBrewViews()}));
+		// A slower version of the event
+		//this.registerEvent(this.app.vault.on('modify', ()=>{this.updateBrewViews()}));
 
-		// This can be used, but the flickering needs to be fixed
-		//this.registerEvent(this.app.workspace.on('editor-change', ()=>{this.updateBrewViews()}));
+		this.registerEvent(this.app.workspace.on('editor-change', ()=>{this.updateBrewViews()}));
 
 		this.checkParser();
 		await this.activateView();
