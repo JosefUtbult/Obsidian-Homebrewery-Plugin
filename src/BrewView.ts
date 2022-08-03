@@ -34,10 +34,14 @@ export class BrewView extends ItemView {
 		
 		for(let i = 0; i < Math.max(bufferEl.children.length, resEl.children.length); i++ ) {
 			if(!bufferEl.children[i]) {
-				resEl.removeChild(resEl.children[bufferEl.children.length - 1]);
+				if(resEl.children[bufferEl.children.length - 1]) {
+					resEl.removeChild(resEl.children[bufferEl.children.length - 1]);
+				}
 			}
 			else if(!resEl.children[i]) {
-				resEl.appendChild(bufferEl.children[i - 1].cloneNode(true));
+				if(bufferEl.children[i - 1]) {
+					resEl.appendChild(bufferEl.children[i - 1].cloneNode(true));
+				}
 			}
 			else {
 				this.compareElementsRecursively(resEl.children[i] as HTMLElement, bufferEl.children[i] as HTMLElement);
@@ -95,9 +99,28 @@ export class BrewView extends ItemView {
 		}
 	}
 
+	// Ugly hack to get substitution functionality with a lambda expression to work in typescript
+	markdownSubstitute(re: RegExp, data: string) {
+		let instance = re.exec(data);
+		if (instance !== null) {
+			const link = instance[1].toLowerCase().replace(' ', '-');
+			const linkEl = `[${instance[1]}](#${link ? link : 'None'})`;
+			const res = instance.input.slice(0, instance.index) + linkEl + 
+				instance.input.slice(instance.index + 
+				instance[0].length, instance.input.length);
+			return this.markdownSubstitute(re, res)
+		}
+		return data;
+	}
+
 	// Read the contents of the active file and try to render it using the Homebrewery parser
-	async parseMarkdown(content: string) {
+	async parseMarkdown(content: string, filename: string) {
+		const inlineFileLinkRe = new RegExp('\\[\\[[\\s]*' + filename + '#([^\\]]*)\\]\\]', 'g');
+		const noFileLinkRe = new RegExp('\\[\\[[\\s]*#([^\\]]*)\\]\\]', 'g');
+		content = this.markdownSubstitute(inlineFileLinkRe, content);
+		content = this.markdownSubstitute(noFileLinkRe, content);
 		
+
 		let homebreweryParser = undefined;
 
 		// Try to load markdown parser and parse the markdown from the active file
@@ -127,8 +150,11 @@ export class BrewView extends ItemView {
 		const activeBrewSettings = this.plugin.getActiveBrewSettings();
 		if(!activeBrewSettings) return;
 		
-		let content = '';
+		const activeFile = this.app.workspace.getActiveFile();
+		if(!activeFile) return;
 		
+		let content = '';
+
 		// Try to load the content from the current editor. The changes here are accessible earlier than from a saved file
 		const doc = app.workspace?.getActiveViewOfType(MarkdownView)?.editor?.getDoc();
 		if(doc) {
@@ -138,12 +164,10 @@ export class BrewView extends ItemView {
 		// If no editor is present (when the view is updated during plugin load or settings changes), just read the content
 		// from the saved active file
 		else {
-			const activeFile = this.app.workspace.getActiveFile();
-			if(!activeFile) return;
 			content = await this.app.vault.read(activeFile);
 		}
-
-		const res = await this.parseMarkdown(content);
+		
+		const res = await this.parseMarkdown(content, activeFile.name.replace('.md', ''));
 		// TODO: Add functionality for locally stored stylesheets
 		this.setContent(res, `${HOMEBREWERY_URL}/api/themes/${activeBrewSettings.theme}/style.css`);
 	}
